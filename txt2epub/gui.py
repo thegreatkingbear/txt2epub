@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -18,7 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .txt2epub import Txt2Epub
+from .txt2epub import DEFAULT_CHAPTER_PATTERN, Txt2Epub, compile_chapter_pattern
 
 
 class Txt2EpubGUI(QMainWindow):
@@ -67,6 +68,25 @@ class Txt2EpubGUI(QMainWindow):
 
         layout.addLayout(form_layout)
 
+        self.chapter_mode = QComboBox(self)
+        self.chapter_mode.addItem("Detect chapters (blank lines)", "auto")
+        self.chapter_mode.addItem("No chapters", "none")
+        self.chapter_mode.addItem("Number chapters (# 1, # 2, ...)", "number")
+        self.chapter_mode.addItem("Custom chapters (regular expression)", "custom")
+        self.chapter_mode.setToolTip(
+            "Choose blank-line detection, continuous text, # headings, or a custom pattern"
+        )
+        form_layout.addRow("Chapters:", self.chapter_mode)
+        self.chapter_pattern_input = QLineEdit(DEFAULT_CHAPTER_PATTERN, self)
+        self.chapter_pattern_input.setToolTip(
+            "Python regular expression matching the entire title line. "
+            "Leading/trailing spaces and tabs are ignored; blank lines are skipped."
+        )
+        self.chapter_pattern_label = QLabel("Chapter regex:", self)
+        form_layout.addRow(self.chapter_pattern_label, self.chapter_pattern_input)
+        self.chapter_mode.currentIndexChanged.connect(self.update_chapter_pattern_visibility)
+        self.update_chapter_pattern_visibility()
+
         self.label = QLabel(
             "Drop a file here or select a file using the button below", self
         )
@@ -86,6 +106,11 @@ class Txt2EpubGUI(QMainWindow):
         central_widget = QWidget(self)
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
+
+    def update_chapter_pattern_visibility(self):
+        visible = self.chapter_mode.currentData() == "custom"
+        self.chapter_pattern_label.setVisible(visible)
+        self.chapter_pattern_input.setVisible(visible)
 
     def select_cover(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -144,6 +169,13 @@ class Txt2EpubGUI(QMainWindow):
 
     def generate_epub(self):
         if self.file_path:
+            if self.chapter_mode.currentData() == "custom":
+                try:
+                    compile_chapter_pattern(self.chapter_pattern_input.text())
+                except ValueError as error:
+                    QMessageBox.critical(self, "Invalid chapter pattern", str(error))
+                    self.chapter_pattern_input.setFocus()
+                    return
             if self.file_path.with_suffix(".epub").is_file():
                 reply = QMessageBox.question(
                     self,
@@ -165,6 +197,10 @@ class Txt2EpubGUI(QMainWindow):
                     book_cover=pathlib.Path(self.cover_input.text())
                     if self.cover_input.text()
                     else None,
+                    detect_chapters=self.chapter_mode.currentData() != "none",
+                    number_chapters=self.chapter_mode.currentData() == "number",
+                    custom_chapters=self.chapter_mode.currentData() == "custom",
+                    chapter_pattern=self.chapter_pattern_input.text(),
                 )
                 self.label.setText(f"EPUB generated for: {self.file_path.name}")
                 QMessageBox.information(

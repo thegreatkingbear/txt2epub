@@ -1,11 +1,23 @@
 import html
 import pathlib
+import re
 import uuid
 
 import langdetect
 from ebooklib import epub
 
 from .utils import convert_image_to_jpeg
+
+DEFAULT_CHAPTER_PATTERN = r"[0-9]+화\.[ \t]+\S[^\r\n]*"
+
+
+def compile_chapter_pattern(pattern: str) -> re.Pattern[str]:
+    if not pattern.strip():
+        raise ValueError("Enter a chapter regular expression.")
+    try:
+        return re.compile(pattern)
+    except re.error as error:
+        raise ValueError(f"Invalid chapter regular expression: {error}") from error
 
 
 class Txt2Epub:
@@ -18,7 +30,18 @@ class Txt2Epub:
         book_author: str | None = None,
         book_language: str | None = None,
         book_cover: pathlib.Path | None = None,
+        detect_chapters: bool = True,
+        number_chapters: bool = False,
+        custom_chapters: bool = False,
+        chapter_pattern: str = DEFAULT_CHAPTER_PATTERN,
     ) -> bool:
+        if number_chapters and custom_chapters:
+            raise ValueError("Number chapters and custom chapters are mutually exclusive")
+        heading_pattern = None
+        if custom_chapters:
+            heading_pattern = compile_chapter_pattern(chapter_pattern)
+        elif number_chapters:
+            heading_pattern = re.compile(r"# [0-9]+")
         # Generate fields if not specified
         book_identifier = book_identifier or str(uuid.uuid4())
         book_title = book_title or input_file.stem
@@ -35,8 +58,29 @@ class Txt2Epub:
             except langdetect.lang_detect_exception.LangDetectException:
                 book_language = "en"
 
-        # Split text into chapters, filtering out empty chunks
-        chapters = [c for c in book_text.split("\n\n\n") if c.strip()]
+        # Each section has an optional heading and a list of body lines.
+        if heading_pattern is not None:
+            chapters = []
+            heading = None
+            lines = []
+            for line in book_text.split("\n"):
+                candidate = line.strip(" \t")
+                if candidate and heading_pattern.fullmatch(candidate):
+                    if heading is not None or any(part.strip() for part in lines):
+                        chapters.append((heading, lines))
+                    heading, lines = candidate, []
+                else:
+                    lines.append(line)
+            if heading is not None or lines:
+                chapters.append((heading, lines))
+        elif detect_chapters:
+            chapters = []
+            for chunk in book_text.split("\n\n\n"):
+                if chunk.strip():
+                    lines = chunk.split("\n")
+                    chapters.append((lines[0], lines[1:]))
+        else:
+            chapters = [(None, book_text.split("\n"))]
 
         # Convert cover image to JPEG
         book_cover_jpeg = None
@@ -56,10 +100,8 @@ class Txt2Epub:
         # Create chapters
         spine: list[str | epub.EpubHtml] = ["nav"]
         toc = []
-        for chapter_id, chapter_content_full in enumerate(chapters):
-            chapter_lines = chapter_content_full.split("\n")
-            chapter_title = chapter_lines[0]
-            chapter_content = chapter_lines[1:]
+        for chapter_id, (heading, chapter_content) in enumerate(chapters):
+            chapter_title = heading if heading is not None else book_title
 
             # Write chapter title and contents
             chapter = epub.EpubHtml(
@@ -67,11 +109,12 @@ class Txt2Epub:
                 file_name="chap_{:02d}.xhtml".format(chapter_id + 1),
                 lang=book_language,
             )
-            chapter.content = "<h1>{}</h1>{}".format(
-                html.escape(chapter_title),
-                "".join(
-                    "<p>{}</p>".format(html.escape(line)) for line in chapter_content
-                ),
+            chapter.content = (
+                "<h1>{}</h1>".format(html.escape(chapter_title))
+                if heading is not None
+                else ""
+            ) + "".join(
+                "<p>{}</p>".format(html.escape(line)) for line in chapter_content
             )
 
             # Add chapter to the book and TOC

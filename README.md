@@ -32,6 +32,45 @@ txt2epub gui
 
 ## Chapter Detection
 
+Chapter detection is enabled by default. To disable it, select **No chapters**
+in the GUI, or add `--no-chapters` on the command line:
+
+```shell
+txt2epub convert -i book.txt --no-chapters
+```
+
+With detection disabled, all lines (including the first line) remain body text in
+one continuous section, without generated chapter headings. EPUB navigation
+contains a single entry using the book title.
+
+For numbered headings such as `# 1` and `# 2001`, select **Number chapters** in the
+GUI or use `txt2epub convert -i book.txt --number-chapters`. Each heading must be
+on its own line: `#`, one space, and ASCII digits. Leading and trailing spaces
+or tabs are allowed, so ` # 2` is also recognized.
+Select **Custom chapters** to reveal an editable **Chapter regex** field.
+The default pattern recognizes Korean episode headings such as `877화. 혈식`.
+Enter a Python regular expression matching the entire title line, for example
+`Chapter [0-9]+: .+`. Leading/trailing spaces and tabs are removed for matching,
+and blank lines are never treated as headings. The complete matching line becomes
+the chapter title; capture groups do not change it. Matching is per line, so
+multiline headings are not supported. Empty or invalid patterns stop conversion.
+To recognize both formats, use `(?:# [0-9]+|[0-9]+화\.[ \t]+.+)`.
+
+```shell
+txt2epub convert -i book.txt --custom-chapters --chapter-pattern 'Chapter [0-9]+: .+'
+```
+
+`--chapter-pattern` requires `--custom-chapters`. Omitting the pattern keeps the
+default Korean episode format. Other chapter modes ignore the GUI regex field.
+`--number-chapters`, `--custom-chapters`, and `--no-chapters` are mutually exclusive.
+Surrounding blank lines and decorative
+lines such as `*` or `-` are preserved as body text and are not required for detection.
+The heading becomes the chapter title and each chapter is stored separately in
+the EPUB. Blank lines within a chapter do not split it. Text before the first
+heading is preserved as an opening section named after the book. If no headings
+match, all text is kept as one body section. This option cannot be combined with
+`--no-chapters`.
+
 This program detects the book chapters and chapter titles following the standard TXT book format:
 
 - Chapters are separated by three new lines (i.e., `\n\n\n`)
