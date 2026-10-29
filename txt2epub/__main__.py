@@ -26,7 +26,8 @@ def main() -> int:
         "-i",
         "--input",
         type=pathlib.Path,
-        help="Path to the input txt file",
+        nargs="+",
+        help="Input TXT files; multiple files become chapters in one EPUB",
         required=True,
     )
     convert_parser.add_argument(
@@ -77,7 +78,7 @@ def main() -> int:
         chapter_pattern = (
             DEFAULT_CHAPTER_PATTERN if args.chapter_pattern is None else args.chapter_pattern
         )
-        if args.custom_chapters:
+        if args.custom_chapters and len(args.input) == 1:
             try:
                 compile_chapter_pattern(chapter_pattern)
             except ValueError as error:

@@ -32,6 +32,34 @@ txt2epub gui
 
 ## Chapter Detection
 
+### Combining multiple TXT files
+
+Use **Select Files** to select several TXT files, or drag and drop them together.
+They are sorted naturally by filename (`1`, `2`, `10`) and combined into one EPUB,
+with exactly one chapter per file. The first nonblank line becomes the chapter
+title and is removed from the body to avoid duplication. Empty files use their
+filename as the title. UTF-8 files with or without a BOM are supported.
+
+Chapter detection controls apply only to single-file conversion. For multiple
+files, choose the output location when generating the EPUB. Hover over the selected
+files message to see their order.
+
+Missing internal filename numbers are reported before conversion in the GUI and
+as warnings in the CLI. Numbers are compared among filenames with the same text
+before the number; titles after it may differ. For example, `Book_001_First.txt`
+and `Book_003_New beginning.txt` report `2`.
+Different prefixes are checked separately; missing numbers before the first
+or after the last selected number cannot be inferred. Warnings do not block conversion.
+
+```shell
+txt2epub convert -i book_001.txt book_002.txt book_003.txt -o combined.epub
+```
+
+Without `-o`, multiple inputs produce `<first-file-stem>_combined.epub` beside the
+first file in sorted order. Single-file output naming remains unchanged.
+
+### Single-file chapter detection
+
 Chapter detection is enabled by default. To disable it, select **No chapters**
 in the GUI, or add `--no-chapters` on the command line:
 
